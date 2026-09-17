@@ -21,9 +21,13 @@ class _DebtEditorScreenState extends State<DebtEditorScreen> {
   final _totalController = TextEditingController();
   final _notesController = TextEditingController();
   String _categoryId = 'otros';
-  DateTime _dueDate = DateTime.now().add(const Duration(days: 30));
+  DateTime _startDate = DateTime.now().add(const Duration(days: 30));
+  PaymentFrequency _frequency = PaymentFrequency.monthly;
+  int _numberOfPayments = 1;
 
   bool get _isEditing => widget.debt != null;
+
+  bool get _scheduled => _frequency != PaymentFrequency.oneTime;
 
   @override
   void initState() {
@@ -34,7 +38,9 @@ class _DebtEditorScreenState extends State<DebtEditorScreen> {
       _totalController.text = d.totalAmount.toStringAsFixed(2);
       _notesController.text = d.notes;
       _categoryId = d.categoryId;
-      _dueDate = d.dueDate;
+      _startDate = d.startDate;
+      _frequency = d.frequency;
+      _numberOfPayments = d.numberOfPayments;
     }
   }
 
@@ -49,11 +55,11 @@ class _DebtEditorScreenState extends State<DebtEditorScreen> {
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: _dueDate,
+      initialDate: _startDate,
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
     );
-    if (picked != null) setState(() => _dueDate = picked);
+    if (picked != null) setState(() => _startDate = picked);
   }
 
   Future<void> _save() async {
@@ -62,6 +68,12 @@ class _DebtEditorScreenState extends State<DebtEditorScreen> {
     if (name.isEmpty || total == null || total <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Ingresa un nombre y un monto válido.')),
+      );
+      return;
+    }
+    if (_scheduled && _numberOfPayments < 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Indica el número de pagos.')),
       );
       return;
     }
@@ -74,11 +86,31 @@ class _DebtEditorScreenState extends State<DebtEditorScreen> {
         totalAmount: total,
         paidAmount: existing?.paidAmount ?? 0,
         categoryId: _categoryId,
-        dueDate: _dueDate,
+        startDate: _startDate,
+        frequency: _frequency,
+        numberOfPayments: _scheduled ? _numberOfPayments : 1,
         notes: _notesController.text.trim(),
       ),
     );
     if (mounted) Navigator.of(context).pop();
+  }
+
+  String _dateLabel() => _scheduled ? 'Fecha del primer pago' : 'Fecha de pago';
+
+  String _previewText(double total) {
+    if (!_scheduled) {
+      return 'Pago único de ${formatMoney(total)} el ${formatDateFull(_startDate)}';
+    }
+    final schedule = computeInstallments(
+      total: total,
+      frequency: _frequency,
+      start: _startDate,
+      numberOfPayments: _numberOfPayments,
+    );
+    if (schedule.isEmpty) return '';
+    final last = schedule.last.date;
+    return '$_numberOfPayments pagos de ${formatMoney(schedule.first.amount)} '
+        '${_frequency.shortLabel} · hasta el ${formatDateFull(last)}';
   }
 
   @override
@@ -95,6 +127,9 @@ class _DebtEditorScreenState extends State<DebtEditorScreen> {
               categories.isNotEmpty) {
             _categoryId = categories.first.id;
           }
+          final total = double.tryParse(
+            _totalController.text.replaceAll(',', '.'),
+          );
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16),
@@ -102,7 +137,8 @@ class _DebtEditorScreenState extends State<DebtEditorScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Registra una deuda o compromiso por vencer y ve su progreso al abonar.',
+                  'Registra una deuda y planifica sus pagos por semana, '
+                  'quincena o mes. También puedes dejarla como pago único.',
                   style: TextStyle(
                     fontSize: 13,
                     color: Colors.black54.withValues(alpha: 0.8),
@@ -128,6 +164,7 @@ class _DebtEditorScreenState extends State<DebtEditorScreen> {
                     'Ej. 8000',
                     Icons.attach_money,
                   ),
+                  onChanged: (_) => setState(() {}),
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
@@ -144,24 +181,100 @@ class _DebtEditorScreenState extends State<DebtEditorScreen> {
                   onChanged: (v) => setState(() => _categoryId = v!),
                 ),
                 const SizedBox(height: 16),
+                DropdownButtonFormField<PaymentFrequency>(
+                  value: _frequency,
+                  decoration: inputDecoration(
+                    'Frecuencia de pago',
+                    '',
+                    Icons.schedule_outlined,
+                  ),
+                  items: [
+                    for (final f in PaymentFrequency.values)
+                      DropdownMenuItem(value: f, child: Text(f.label)),
+                  ],
+                  onChanged: (v) => setState(() => _frequency = v!),
+                ),
+                if (_scheduled) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    'Número de pagos',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Row(
+                        children: [
+                          IconButton(
+                            onPressed:
+                                _numberOfPayments > 1
+                                    ? () => setState(() => _numberOfPayments--)
+                                    : null,
+                            icon: const Icon(Icons.remove_circle_outline),
+                          ),
+                          Expanded(
+                            child: Text(
+                              '$_numberOfPayments',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed:
+                                _numberOfPayments < 48
+                                    ? () => setState(() => _numberOfPayments++)
+                                    : null,
+                            icon: const Icon(Icons.add_circle_outline),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 16),
                 InkWell(
                   onTap: _pickDate,
                   borderRadius: BorderRadius.circular(14),
                   child: InputDecorator(
                     decoration: inputDecoration(
-                      'Fecha de vencimiento',
+                      _dateLabel(),
                       '',
                       Icons.event_outlined,
                     ),
-                    child: Text(formatDateFull(_dueDate)),
+                    child: Text(formatDateFull(_startDate)),
                   ),
                 ),
+                if (total != null && total > 0) ...[
+                  const SizedBox(height: 14),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.04),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      _previewText(total),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 TextField(
                   controller: _notesController,
                   decoration: inputDecoration(
                     'Notas (opcional)',
-                    'Ej. Tasa, pagos mensuales',
+                    'Ej. Tasa, tienda',
                     Icons.notes,
                   ),
                 ),

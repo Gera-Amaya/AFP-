@@ -162,7 +162,9 @@ class _PlanTabState extends State<PlanTab> {
                 padding: const EdgeInsets.only(bottom: 10),
                 child: _DebtCard(
                   debt: d,
+                  month: _month,
                   onPay: () => _pay(context, d),
+                  onPayInstallment: (inst) => _payInstallment(context, d, inst),
                   onEdit: () => _openDebtEditor(context, d),
                   onDelete: () => _deleteDebt(context, d),
                 ),
@@ -283,6 +285,16 @@ class _PlanTabState extends State<PlanTab> {
               ),
             ],
           ),
+    );
+  }
+
+  void _payInstallment(BuildContext context, Debt d, DebtInstallment inst) {
+    final effective = inst.amount > d.remaining ? d.remaining : inst.amount;
+    if (effective <= 0) return;
+    FinanceRepository.instance.payDebt(
+      d,
+      effective,
+      description: '${d.name} (cuota ${formatDateShort(inst.date)})',
     );
   }
 
@@ -636,21 +648,36 @@ class _PlannedExpenseTile extends StatelessWidget {
 
 class _DebtCard extends StatelessWidget {
   final Debt debt;
+  final DateTime month;
   final VoidCallback onPay;
+  final ValueChanged<DebtInstallment> onPayInstallment;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   const _DebtCard({
     required this.debt,
+    required this.month,
     required this.onPay,
+    required this.onPayInstallment,
     required this.onEdit,
     required this.onDelete,
   });
+
+  String get _scheduleInfo {
+    if (debt.installmentCount <= 1) {
+      return 'Pago único el ${formatDateFull(debt.startDate)}';
+    }
+    final last = debt.installments.last.date;
+    return '${debt.installmentCount} pagos de '
+        '${formatMoney(debt.installments.first.amount)} '
+        '${debt.frequency.shortLabel} · hasta ${formatDateFull(last)}';
+  }
 
   @override
   Widget build(BuildContext context) {
     final repo = FinanceRepository.instance;
     final category = repo.getCategory(debt.categoryId);
+    final pending = repo.pendingInstallmentsForMonth(debt, month);
 
     return Card(
       child: Padding(
@@ -673,8 +700,8 @@ class _DebtCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Vence: ${formatDateFull(debt.dueDate)}'
-                        '${category != null ? ' · ${category.name}' : ''}',
+                        _scheduleInfo +
+                            (category != null ? ' · ${category.name}' : ''),
                         style: const TextStyle(
                           fontSize: 12,
                           color: Colors.black54,
@@ -728,6 +755,80 @@ class _DebtCard extends StatelessWidget {
               'Pagado ${formatMoney(debt.paidAmount)} de ${formatMoney(debt.totalAmount)}',
               style: const TextStyle(fontSize: 11, color: Colors.black45),
             ),
+            if (debt.isPaidOff) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(
+                    Icons.check_circle,
+                    color: AppColors.income,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Deuda liquidada',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.income,
+                    ),
+                  ),
+                ],
+              ),
+            ] else if (pending.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              const Text(
+                'Pagos planeados de este mes',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 6),
+              for (final inst in pending) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.03),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        inst.date.isBefore(DateTime(month.year, month.month))
+                            ? Icons.warning_amber_outlined
+                            : Icons.event_outlined,
+                        size: 16,
+                        color:
+                            inst.date.isBefore(
+                                  DateTime(month.year, month.month),
+                                )
+                                ? Colors.orange
+                                : Colors.black54,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '${formatDateShort(inst.date)}'
+                          '${inst.date.isBefore(DateTime(month.year, month.month)) ? ' (vencida)' : ''}'
+                          ' · ${formatMoney(inst.amount)}',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => onPayInstallment(inst),
+                        child: const Text('Pagar cuota'),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 4),
+              ],
+            ] else
+              ...[],
             if (!debt.isPaidOff) ...[
               const SizedBox(height: 6),
               Align(

@@ -173,14 +173,14 @@ class FinanceRepository {
 
   Future<void> deleteDebt(String id) => _debtsBox.delete(id);
 
-  Future<void> payDebt(Debt debt, double amount) async {
+  Future<void> payDebt(Debt debt, double amount, {String? description}) async {
     await saveTransaction(
       Transaction(
         id: const Uuid().v4(),
         type: CategoryType.expense,
         amount: amount,
         categoryId: debt.categoryId,
-        description: '${debt.name} (abono)',
+        description: description ?? '${debt.name} (abono)',
         date: DateTime.now(),
       ),
     );
@@ -203,13 +203,37 @@ class FinanceRepository {
       getPlannedExpenses().fold(0, (sum, e) => sum + e.amount);
 
   double debtsDueTotal(DateTime month) {
+    final start = DateTime(month.year, month.month);
     final end = DateTime(
       month.year,
       month.month + 1,
     ).subtract(const Duration(days: 1));
-    return getDebts()
-        .where((d) => !d.isPaidOff && !d.dueDate.isAfter(end))
-        .fold(0, (sum, d) => sum + d.remaining);
+    var total = 0.0;
+    for (final debt in getDebts()) {
+      for (final inst in debt.installments) {
+        if (!debt.isInstallmentPaid(inst) &&
+            !inst.date.isBefore(start) &&
+            !inst.date.isAfter(end)) {
+          total += inst.amount;
+        }
+      }
+    }
+    return total;
+  }
+
+  List<DebtInstallment> pendingInstallmentsForMonth(Debt debt, DateTime month) {
+    final start = DateTime(month.year, month.month);
+    final end = DateTime(
+      month.year,
+      month.month + 1,
+    ).subtract(const Duration(days: 1));
+    return [
+      for (final inst in debt.installments)
+        if (!debt.isInstallmentPaid(inst) &&
+            (inst.date.isBefore(start) || // vencidas sin pagar
+                (!inst.date.isBefore(start) && !inst.date.isAfter(end))))
+          inst,
+    ];
   }
 
   double availableForSavings(DateTime month) =>
