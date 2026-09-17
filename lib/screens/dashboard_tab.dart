@@ -41,7 +41,7 @@ class DashboardTab extends StatelessWidget {
                 SliverAppBar(
                   pinned: true,
                   backgroundColor: Colors.white,
-                  title: const Text('Finanzas Personales'),
+                  title: const Text('AFP'),
                   actions: [
                     Padding(
                       padding: const EdgeInsets.only(right: 8),

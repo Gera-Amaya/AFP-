@@ -1,16 +1,31 @@
-# finanzas_personales
+# AFP — App de Finanzas Personales
 
-A new Flutter project.
+Aplicación para el control de finanzas personales. Registra ingresos y gastos,
+organízalos por categorías y etiquetas, consulta reportes con gráficos y guarda
+todo **localmente**, sin necesidad de internet.
 
-## Getting Started
+## Funcionalidades
 
-This project is a starting point for a Flutter application.
+- Registro de ingresos y gastos con monto, fecha y descripción
+- Categorías personalizables (ícono y color) y etiquetas
+- Balance total y resumen mensual (ingresos vs. gastos)
+- Reportes: gastos por categoría (pastel) y evolución por mes (barras)
+- Almacenamiento local con Hive (SQLite/IndexedDB), 100% offline
 
-A few resources to get you started if this is your first Flutter project:
+## Plataformas
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+- Android
+- Web (PWA instalable en iPhone/Android)
+- Windows
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Ejecutar en desarrollo
+
+```bash
+flutter pub get
+flutter run -d chrome
+```
+
+## Despliegue (Netlify)
+
+El repositorio incluye `netlify.toml` y `netlify-build.sh`, que instalan Flutter
+y compilan la versión web automáticamente. Conecta el repo a Netlify y listo.
