@@ -12,6 +12,9 @@ String monthName(DateTime date) =>
 String formatDateFull(DateTime date) =>
     DateFormat('d MMM yyyy', 'es_MX').format(date);
 
+String formatDateShort(DateTime date) =>
+    DateFormat('d MMM', 'es_MX').format(date);
+
 String formatTime(DateTime date) => DateFormat('HH:mm', 'es_MX').format(date);
 
 String currentMonthKey(DateTime date) =>
