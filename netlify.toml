@@ -2,8 +2,26 @@
   command = "bash netlify-build.sh"
   publish = "build/web"
 
+# Configuración de contextos de despliegue:
+#   - main            -> producción (solo se publica cuando haces merge a main)
+#   - dev y otras     -> Deploy Previews con URL propia (no publicadas)
+#   - Pull requests   -> Deploy Previews automáticas
+
 [build.environment]
   FLUTTER_VERSION = "3.29.2"
+
+[context.production]
+  # Se publica automáticamente, pero solo para la rama de producción (main).
+  command = "bash netlify-build.sh"
+
+[context.deploy-preview]
+  # Todas las ramas / pull requests generan una vista previa sin publicar.
+  # Si quieres que las PRs NO compilen (más rápido), cambia command por:
+  # command = "echo 'Skip build for PRs'"
+  command = "bash netlify-build.sh"
+
+[context.branch-deploy]
+  command = "bash netlify-build.sh"
 
 [[headers]]
   for = "/*"

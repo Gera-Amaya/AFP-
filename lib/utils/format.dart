@@ -14,6 +14,9 @@ String formatDateFull(DateTime date) =>
 
 String formatTime(DateTime date) => DateFormat('HH:mm', 'es_MX').format(date);
 
+String currentMonthKey(DateTime date) =>
+    '${date.year}-${date.month.toString().padLeft(2, '0')}';
+
 const categoryIcons = {
   'payments': Icons.payments_outlined,
   'savings': Icons.savings_outlined,

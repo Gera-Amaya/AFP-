@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'add_transaction_screen.dart';
 import 'categories_screen.dart';
 import 'dashboard_tab.dart';
+import 'plan_tab.dart';
 import 'reports_screen.dart';
 import 'transactions_screen.dart';
 
@@ -24,6 +25,7 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           DashboardTab(onShowAll: () => setState(() => _index = 1)),
           const TransactionsScreen(),
+          const PlanTab(),
           const ReportsScreen(),
           const CategoriesScreen(),
         ],
@@ -51,6 +53,11 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icon(Icons.receipt_long_outlined),
             selectedIcon: Icon(Icons.receipt_long),
             label: 'Movimientos',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.event_note_outlined),
+            selectedIcon: Icon(Icons.event_note),
+            label: 'Plan',
           ),
           NavigationDestination(
             icon: Icon(Icons.pie_chart_outline),
