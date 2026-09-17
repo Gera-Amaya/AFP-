@@ -62,6 +62,11 @@ class _DebtEditorScreenState extends State<DebtEditorScreen> {
     if (picked != null) setState(() => _startDate = picked);
   }
 
+  String _resolveCategoryId(List<Category> categories) {
+    if (categories.any((c) => c.id == _categoryId)) return _categoryId;
+    return categories.isNotEmpty ? categories.first.id : '';
+  }
+
   Future<void> _save() async {
     final name = _nameController.text.trim();
     final total = double.tryParse(_totalController.text.replaceAll(',', '.'));
@@ -78,6 +83,9 @@ class _DebtEditorScreenState extends State<DebtEditorScreen> {
       return;
     }
     final repo = FinanceRepository.instance;
+    final categoryId = _resolveCategoryId(
+      repo.getCategoriesByType(CategoryType.expense),
+    );
     final existing = widget.debt;
     await repo.saveDebt(
       Debt(
@@ -85,7 +93,7 @@ class _DebtEditorScreenState extends State<DebtEditorScreen> {
         name: name,
         totalAmount: total,
         paidAmount: existing?.paidAmount ?? 0,
-        categoryId: _categoryId,
+        categoryId: categoryId,
         startDate: _startDate,
         frequency: _frequency,
         numberOfPayments: _scheduled ? _numberOfPayments : 1,
@@ -123,10 +131,7 @@ class _DebtEditorScreenState extends State<DebtEditorScreen> {
           final categories = FinanceRepository.instance.getCategoriesByType(
             CategoryType.expense,
           );
-          if (!categories.any((c) => c.id == _categoryId) &&
-              categories.isNotEmpty) {
-            _categoryId = categories.first.id;
-          }
+          final categoryId = _resolveCategoryId(categories);
           final total = double.tryParse(
             _totalController.text.replaceAll(',', '.'),
           );
@@ -168,7 +173,7 @@ class _DebtEditorScreenState extends State<DebtEditorScreen> {
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  value: _categoryId,
+                  value: categoryId,
                   decoration: inputDecoration(
                     'Categoría',
                     '',

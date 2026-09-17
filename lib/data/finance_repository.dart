@@ -86,6 +86,22 @@ class FinanceRepository {
         'No se puede eliminar una categoría con movimientos asociados.',
       );
     }
+    final usedByExpenses = _plannedExpensesBox.values
+        .map((m) => PlannedExpense.fromMap(_cast(m)))
+        .any((e) => e.categoryId == id);
+    if (usedByExpenses) {
+      throw Exception(
+        'No se puede eliminar: hay compromisos que usan esta categoría.',
+      );
+    }
+    final usedByDebts = _debtsBox.values
+        .map((m) => Debt.fromMap(_cast(m)))
+        .any((d) => d.categoryId == id);
+    if (usedByDebts) {
+      throw Exception(
+        'No se puede eliminar: hay deudas que usan esta categoría.',
+      );
+    }
     await _categoriesBox.delete(id);
   }
 
@@ -99,7 +115,7 @@ class FinanceRepository {
   List<Transaction> getTransactionsBetween(DateTime start, DateTime end) =>
       getTransactions().where((t) {
         final d = t.date;
-        return !d.isBefore(start) && !d.isAfter(end);
+        return !d.isBefore(start) && d.isBefore(end.add(const Duration(days: 1)));
       }).toList();
 
   Future<void> saveTransaction(Transaction transaction) =>
@@ -197,23 +213,78 @@ class FinanceRepository {
   Future<void> savePlanConfig(PlanConfig config) =>
       _planConfigBox.put('config', config.toMap());
 
+  // ---------- Respaldo (export/import) ----------
+
+  Map<String, dynamic> exportAll() => {
+    'version': 1,
+    'exportedAt': DateTime.now().toIso8601String(),
+    'categories': _categoriesBox.values.map(_cast).toList(),
+    'transactions': _transactionsBox.values.map(_cast).toList(),
+    'planned_expenses': _plannedExpensesBox.values.map(_cast).toList(),
+    'debts': _debtsBox.values.map(_cast).toList(),
+    'plan_config': _planConfigBox.get('config') == null
+        ? null
+        : _cast(_planConfigBox.get('config')!),
+  };
+
+  Future<void> importAll(Map<String, dynamic> data) async {
+    List<Map<String, dynamic>> readList(String key) {
+      final raw = data[key];
+      if (raw is! List) {
+        throw FormatException('Respaldo inválido: falta "$key" o no es una lista.');
+      }
+      return [
+        for (final item in raw)
+          if (item is Map)
+            _cast(item)
+          else
+            throw const FormatException('Respaldo inválido: entrada corrupta.'),
+      ];
+    }
+
+    final categories = readList('categories');
+    final transactions = readList('transactions');
+    final plannedExpenses = readList('planned_expenses');
+    final debts = readList('debts');
+    final config = data['plan_config'] is Map
+        ? _cast(data['plan_config']! as Map)
+        : null;
+
+    await _categoriesBox.clear();
+    await _transactionsBox.clear();
+    await _plannedExpensesBox.clear();
+    await _debtsBox.clear();
+    await _planConfigBox.clear();
+
+    for (final c in categories) {
+      await _categoriesBox.put(c['id'] as String, c);
+    }
+    for (final t in transactions) {
+      await _transactionsBox.put(t['id'] as String, t);
+    }
+    for (final e in plannedExpenses) {
+      await _plannedExpensesBox.put(e['id'] as String, e);
+    }
+    for (final d in debts) {
+      await _debtsBox.put(d['id'] as String, d);
+    }
+    if (config != null) {
+      await _planConfigBox.put('config', config);
+    }
+  }
+
   // ---------- Cálculos de ahorro ----------
 
   double plannedExpensesTotal() =>
       getPlannedExpenses().fold(0, (sum, e) => sum + e.amount);
 
   double debtsDueTotal(DateTime month) {
-    final start = DateTime(month.year, month.month);
-    final end = DateTime(
-      month.year,
-      month.month + 1,
-    ).subtract(const Duration(days: 1));
     var total = 0.0;
     for (final debt in getDebts()) {
       for (final inst in debt.installments) {
         if (!debt.isInstallmentPaid(inst) &&
-            !inst.date.isBefore(start) &&
-            !inst.date.isAfter(end)) {
+            inst.date.year == month.year &&
+            inst.date.month == month.month) {
           total += inst.amount;
         }
       }
@@ -222,16 +293,12 @@ class FinanceRepository {
   }
 
   List<DebtInstallment> pendingInstallmentsForMonth(Debt debt, DateTime month) {
-    final start = DateTime(month.year, month.month);
-    final end = DateTime(
-      month.year,
-      month.month + 1,
-    ).subtract(const Duration(days: 1));
     return [
       for (final inst in debt.installments)
         if (!debt.isInstallmentPaid(inst) &&
-            (inst.date.isBefore(start) || // vencidas sin pagar
-                (!inst.date.isBefore(start) && !inst.date.isAfter(end))))
+            (isBeforeMonth(inst.date, month) ||
+                (inst.date.year == month.year &&
+                    inst.date.month == month.month)))
           inst,
     ];
   }
@@ -240,6 +307,10 @@ class FinanceRepository {
       getPlanConfig().monthlyIncome -
       plannedExpensesTotal() -
       debtsDueTotal(month);
+
+  static bool isBeforeMonth(DateTime date, DateTime month) =>
+      date.year < month.year ||
+      (date.year == month.year && date.month < month.month);
 
   // ---------- Predeterminadas ----------
 

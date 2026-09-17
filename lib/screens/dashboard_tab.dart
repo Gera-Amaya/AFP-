@@ -1,4 +1,10 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:file_saver/file_saver.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../data/finance_repository.dart';
 import '../models/transaction.dart';
@@ -53,6 +59,25 @@ class DashboardTab extends StatelessWidget {
                           fontWeight: FontWeight.w600,
                         ),
                       ),
+                    ),
+                    PopupMenuButton<String>(
+                      icon: const Icon(Icons.more_vert),
+                      tooltip: 'Opciones',
+                      onSelected: (value) {
+                        if (value == 'export') _exportBackup(context);
+                        if (value == 'import') _importBackup(context);
+                      },
+                      itemBuilder:
+                          (_) => const [
+                            PopupMenuItem(
+                              value: 'export',
+                              child: Text('Exportar respaldo'),
+                            ),
+                            PopupMenuItem(
+                              value: 'import',
+                              child: Text('Importar respaldo'),
+                            ),
+                          ],
                     ),
                   ],
                 ),
@@ -113,6 +138,91 @@ class DashboardTab extends StatelessWidget {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => AddTransactionScreen(transaction: t)),
     );
+  }
+
+  Future<void> _exportBackup(BuildContext context) async {
+    final json = jsonEncode(
+      FinanceRepository.instance.exportAll(),
+    );
+    final date = DateFormat('yyyy-MM-dd', 'es_MX').format(DateTime.now());
+    try {
+      await FileSaver.instance.saveFile(
+        name: 'respaldo_afp_$date.json',
+        bytes: Uint8List.fromList(utf8.encode(json)),
+        mimeType: MimeType.json,
+        fileExtension: 'json',
+      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Respaldo exportado.')),
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se pudo exportar el respaldo.')),
+        );
+      }
+    }
+  }
+
+  Future<void> _importBackup(BuildContext context) async {
+    const group = XTypeGroup(label: 'JSON', extensions: ['json']);
+    final XFile? file = await openFile(acceptedTypeGroups: [group]);
+    if (file == null) return;
+
+    final Map<String, dynamic> data;
+    try {
+      data = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('El archivo seleccionado no es válido.')),
+        );
+      }
+      return;
+    }
+    if (!context.mounted) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder:
+          (dialogContext) => AlertDialog(
+            title: const Text('Importar respaldo'),
+            content: const Text(
+              'Se reemplazarán todos tus datos actuales por los del respaldo. '
+              '¿Continuar?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('Importar'),
+              ),
+            ],
+          ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    try {
+      await FinanceRepository.instance.importAll(data);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Respaldo importado correctamente.')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al importar: ${e.toString().replaceAll('Exception: ', '')}'),
+          ),
+        );
+      }
+    }
   }
 
   void _confirmDelete(BuildContext context, Transaction t) {

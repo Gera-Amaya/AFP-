@@ -24,11 +24,6 @@ class _PlanTabState extends State<PlanTab> {
   Listenable? _listenable;
 
   @override
-  void initState() {
-    super.initState();
-  }
-
-  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_listenable != null) {
@@ -252,40 +247,37 @@ class _PlanTabState extends State<PlanTab> {
     );
     showDialog<void>(
       context: context,
-      builder:
-          (dialogContext) => AlertDialog(
-            title: Text('Abonar a "${d.name}"'),
-            content: TextField(
-              controller: controller,
-              autofocus: true,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              decoration: const InputDecoration(
-                labelText: 'Monto del abono',
-                prefixText: r'$ ',
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('Cancelar'),
-              ),
-              FilledButton(
-                onPressed: () async {
-                  final amount = double.tryParse(
-                    controller.text.replaceAll(',', '.'),
-                  );
-                  if (amount == null || amount <= 0) return;
-                  final effective = amount > d.remaining ? d.remaining : amount;
-                  await FinanceRepository.instance.payDebt(d, effective);
-                  if (dialogContext.mounted) Navigator.of(dialogContext).pop();
-                },
-                child: const Text('Abonar'),
-              ),
-            ],
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Abonar a "${d.name}"'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(
+            labelText: 'Monto del abono',
+            prefixText: r'$ ',
           ),
-    );
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final amount = double.tryParse(
+                controller.text.replaceAll(',', '.'),
+              );
+              if (amount == null || amount <= 0) return;
+              final effective = amount > d.remaining ? d.remaining : amount;
+              await FinanceRepository.instance.payDebt(d, effective);
+              if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+            },
+            child: const Text('Abonar'),
+          ),
+        ],
+      ),
+    ).whenComplete(controller.dispose);
   }
 
   void _payInstallment(BuildContext context, Debt d, DebtInstallment inst) {
@@ -300,74 +292,74 @@ class _PlanTabState extends State<PlanTab> {
 
   void _openConfig(BuildContext context, PlanConfig config) {
     final incomeController = TextEditingController(
-      text:
-          config.monthlyIncome == 0
-              ? ''
-              : config.monthlyIncome.toStringAsFixed(2),
+      text: config.monthlyIncome == 0
+          ? ''
+          : config.monthlyIncome.toStringAsFixed(2),
     );
     final goalController = TextEditingController(
-      text:
-          config.savingsGoal == 0 ? '' : config.savingsGoal.toStringAsFixed(2),
+      text: config.savingsGoal == 0 ? '' : config.savingsGoal.toStringAsFixed(2),
     );
     showDialog<void>(
       context: context,
-      builder:
-          (dialogContext) => AlertDialog(
-            title: const Text('Presupuesto y ahorro'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: incomeController,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  decoration: const InputDecoration(
-                    labelText: 'Ingreso mensual planeado (sueldo)',
-                    prefixText: r'$ ',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: goalController,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  decoration: const InputDecoration(
-                    labelText: 'Meta de ahorro mensual',
-                    prefixText: r'$ ',
-                  ),
-                ),
-              ],
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Presupuesto y ahorro'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: incomeController,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: const InputDecoration(
+                labelText: 'Ingreso mensual planeado (sueldo)',
+                prefixText: r'$ ',
+              ),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('Cancelar'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: goalController,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
               ),
-              FilledButton(
-                onPressed: () async {
-                  await FinanceRepository.instance.savePlanConfig(
-                    PlanConfig(
-                      monthlyIncome:
-                          double.tryParse(
-                            incomeController.text.replaceAll(',', '.'),
-                          ) ??
-                          0,
-                      savingsGoal:
-                          double.tryParse(
-                            goalController.text.replaceAll(',', '.'),
-                          ) ??
-                          0,
-                    ),
-                  );
-                  if (dialogContext.mounted) Navigator.of(dialogContext).pop();
-                },
-                child: const Text('Guardar'),
+              decoration: const InputDecoration(
+                labelText: 'Meta de ahorro mensual',
+                prefixText: r'$ ',
               ),
-            ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancelar'),
           ),
-    );
+          FilledButton(
+            onPressed: () async {
+              await FinanceRepository.instance.savePlanConfig(
+                PlanConfig(
+                  monthlyIncome:
+                      double.tryParse(
+                        incomeController.text.replaceAll(',', '.'),
+                      ) ??
+                      0,
+                  savingsGoal:
+                      double.tryParse(
+                        goalController.text.replaceAll(',', '.'),
+                      ) ??
+                      0,
+                ),
+              );
+              if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+            },
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    ).whenComplete(() {
+      incomeController.dispose();
+      goalController.dispose();
+    });
   }
 }
 

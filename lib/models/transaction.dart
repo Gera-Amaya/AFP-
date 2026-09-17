@@ -34,7 +34,7 @@ class Transaction {
     type: CategoryType.values.firstWhere((e) => e.name == map['type']),
     amount: (map['amount'] as num).toDouble(),
     categoryId: map['categoryId'] as String,
-    tags: (map['tags'] as List).cast<String>(),
+    tags: ((map['tags'] as List?) ?? const []).cast<String>(),
     description: (map['description'] as String?) ?? '',
     date: DateTime.fromMillisecondsSinceEpoch(map['date'] as int),
   );

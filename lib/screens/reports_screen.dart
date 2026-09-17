@@ -104,23 +104,25 @@ class _ExpensePieCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final repo = FinanceRepository.instance;
-    final expenses =
-        repo
-            .getTransactionsBetween(
-              DateTime(month.year, month.month),
-              DateTime(
-                month.year,
-                month.month + 1,
-              ).subtract(const Duration(days: 1)),
-            )
-            .where((t) => t.type == CategoryType.expense)
-            .toList();
+    final expenses = repo
+        .getTransactions()
+        .where(
+          (t) =>
+              t.type == CategoryType.expense &&
+              t.date.year == month.year &&
+              t.date.month == month.month,
+        )
+        .toList();
 
     final categoryTotals = <String, double>{};
     for (final t in expenses) {
       categoryTotals[t.categoryId] =
           (categoryTotals[t.categoryId] ?? 0) + t.amount;
     }
+
+    final categoriesById = {
+      for (final c in repo.getCategories()) c.id: c,
+    };
 
     final total = categoryTotals.values.fold<double>(0, (a, b) => a + b);
 
@@ -166,7 +168,12 @@ class _ExpensePieCard extends StatelessWidget {
                         centerSpaceRadius: 45,
                         sections: [
                           for (final entry in categoryTotals.entries)
-                            _pieSection(entry.key, entry.value, total),
+                            _pieSection(
+                              categoriesById,
+                              entry.key,
+                              entry.value,
+                              total,
+                            ),
                         ],
                       ),
                     ),
@@ -189,18 +196,12 @@ class _ExpensePieCard extends StatelessWidget {
   }
 
   PieChartSectionData _pieSection(
+    Map<String, Category> categoriesById,
     String categoryId,
     double value,
     double total,
   ) {
-    final categories = FinanceRepository.instance.getCategories();
-    Category? category;
-    for (final c in categories) {
-      if (c.id == categoryId) {
-        category = c;
-        break;
-      }
-    }
+    final category = categoriesById[categoryId];
     final percent = total == 0 ? 0.0 : (value / total * 100);
     return PieChartSectionData(
       value: value,
