@@ -1,12 +1,20 @@
 import 'package:flutter/foundation.dart' show ValueListenable, kIsWeb;
 import 'package:flutter/widgets.dart' show WidgetsFlutterBinding;
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:uuid/uuid.dart';
 
 import '../models/category.dart';
+import '../models/debt.dart';
+import '../models/plan_config.dart';
+import '../models/planned_expense.dart';
 import '../models/transaction.dart';
+import '../utils/format.dart';
 
 const boxNameCategories = 'categories';
 const boxNameTransactions = 'transactions';
+const boxNamePlannedExpenses = 'planned_expenses';
+const boxNameDebts = 'debts';
+const boxNamePlanConfig = 'plan_config';
 
 Future<void> initStorage() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,6 +25,9 @@ Future<void> initStorage() async {
   }
   await Hive.openBox<Map>(boxNameCategories);
   await Hive.openBox<Map>(boxNameTransactions);
+  await Hive.openBox<Map>(boxNamePlannedExpenses);
+  await Hive.openBox<Map>(boxNameDebts);
+  await Hive.openBox<Map>(boxNamePlanConfig);
 }
 
 class FinanceRepository {
@@ -26,11 +37,19 @@ class FinanceRepository {
 
   Box<Map> get _categoriesBox => Hive.box(boxNameCategories);
   Box<Map> get _transactionsBox => Hive.box(boxNameTransactions);
+  Box<Map> get _plannedExpensesBox => Hive.box(boxNamePlannedExpenses);
+  Box<Map> get _debtsBox => Hive.box(boxNameDebts);
+  Box<Map> get _planConfigBox => Hive.box(boxNamePlanConfig);
 
   ValueListenable<Box<Map>> get categoriesListenable =>
       _categoriesBox.listenable();
   ValueListenable<Box<Map>> get transactionsListenable =>
       _transactionsBox.listenable();
+  ValueListenable<Box<Map>> get plannedExpensesListenable =>
+      _plannedExpensesBox.listenable();
+  ValueListenable<Box<Map>> get debtsListenable => _debtsBox.listenable();
+  ValueListenable<Box<Map>> get planConfigListenable =>
+      _planConfigBox.listenable();
 
   Map<String, dynamic> _cast(Map raw) => Map<String, dynamic>.from(raw);
 
@@ -115,6 +134,88 @@ class FinanceRepository {
       end,
     ).where((t) => t.type == type).fold(0, (sum, t) => sum + t.amount);
   }
+
+  // ---------- Compromisos (gastos futuros) ----------
+
+  List<PlannedExpense> getPlannedExpenses() =>
+      _plannedExpensesBox.values
+          .map((m) => PlannedExpense.fromMap(_cast(m)))
+          .toList();
+
+  Future<void> savePlannedExpense(PlannedExpense expense) =>
+      _plannedExpensesBox.put(expense.id, expense.toMap());
+
+  Future<void> deletePlannedExpense(String id) =>
+      _plannedExpensesBox.delete(id);
+
+  Future<void> markPlannedExpensePaid(PlannedExpense expense) async {
+    final key = currentMonthKey(DateTime.now());
+    if (expense.lastPaidKey == key) return;
+    await saveTransaction(
+      Transaction(
+        id: const Uuid().v4(),
+        type: CategoryType.expense,
+        amount: expense.amount,
+        categoryId: expense.categoryId,
+        description: '${expense.name} (pago de compromiso)',
+        date: DateTime.now(),
+      ),
+    );
+    await savePlannedExpense(expense.copyWith(lastPaidKey: key));
+  }
+
+  // ---------- Deudas ----------
+
+  List<Debt> getDebts() =>
+      _debtsBox.values.map((m) => Debt.fromMap(_cast(m))).toList();
+
+  Future<void> saveDebt(Debt debt) => _debtsBox.put(debt.id, debt.toMap());
+
+  Future<void> deleteDebt(String id) => _debtsBox.delete(id);
+
+  Future<void> payDebt(Debt debt, double amount) async {
+    await saveTransaction(
+      Transaction(
+        id: const Uuid().v4(),
+        type: CategoryType.expense,
+        amount: amount,
+        categoryId: debt.categoryId,
+        description: '${debt.name} (abono)',
+        date: DateTime.now(),
+      ),
+    );
+    await saveDebt(debt.copyWith(paidAmount: debt.paidAmount + amount));
+  }
+
+  // ---------- Configuración del plan ----------
+
+  PlanConfig getPlanConfig() {
+    final raw = _planConfigBox.get('config');
+    return raw == null ? const PlanConfig() : PlanConfig.fromMap(_cast(raw));
+  }
+
+  Future<void> savePlanConfig(PlanConfig config) =>
+      _planConfigBox.put('config', config.toMap());
+
+  // ---------- Cálculos de ahorro ----------
+
+  double plannedExpensesTotal() =>
+      getPlannedExpenses().fold(0, (sum, e) => sum + e.amount);
+
+  double debtsDueTotal(DateTime month) {
+    final end = DateTime(
+      month.year,
+      month.month + 1,
+    ).subtract(const Duration(days: 1));
+    return getDebts()
+        .where((d) => !d.isPaidOff && !d.dueDate.isAfter(end))
+        .fold(0, (sum, d) => sum + d.remaining);
+  }
+
+  double availableForSavings(DateTime month) =>
+      getPlanConfig().monthlyIncome -
+      plannedExpensesTotal() -
+      debtsDueTotal(month);
 
   // ---------- Predeterminadas ----------
 
