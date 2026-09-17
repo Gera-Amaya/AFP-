@@ -44,6 +44,11 @@ class _PlannedExpenseEditorScreenState
     super.dispose();
   }
 
+  String _resolveCategoryId(List<Category> categories) {
+    if (categories.any((c) => c.id == _categoryId)) return _categoryId;
+    return categories.isNotEmpty ? categories.first.id : '';
+  }
+
   Future<void> _save() async {
     final name = _nameController.text.trim();
     final amount = double.tryParse(_amountController.text.replaceAll(',', '.'));
@@ -54,12 +59,15 @@ class _PlannedExpenseEditorScreenState
       return;
     }
     final repo = FinanceRepository.instance;
+    final categoryId = _resolveCategoryId(
+      repo.getCategoriesByType(CategoryType.expense),
+    );
     await repo.savePlannedExpense(
       PlannedExpense(
         id: widget.expense?.id ?? const Uuid().v4(),
         name: name,
         amount: amount,
-        categoryId: _categoryId,
+        categoryId: categoryId,
         dayOfMonth: _dayOfMonth,
         lastPaidKey: widget.expense?.lastPaidKey,
       ),
@@ -79,10 +87,7 @@ class _PlannedExpenseEditorScreenState
           final categories = FinanceRepository.instance.getCategoriesByType(
             CategoryType.expense,
           );
-          if (!categories.any((c) => c.id == _categoryId) &&
-              categories.isNotEmpty) {
-            _categoryId = categories.first.id;
-          }
+          final categoryId = _resolveCategoryId(categories);
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16),
@@ -119,7 +124,7 @@ class _PlannedExpenseEditorScreenState
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  value: _categoryId,
+                  value: categoryId,
                   decoration: inputDecoration(
                     'Categoría',
                     '',

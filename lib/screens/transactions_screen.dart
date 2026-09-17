@@ -19,6 +19,7 @@ class TransactionsScreen extends StatefulWidget {
 class _TransactionsScreenState extends State<TransactionsScreen> {
   DateTime _month = DateTime.now();
   int? _typeFilter; // null = todos, 0 = gasto, 1 = ingreso
+  String? _tagFilter; // null = todas las etiquetas
 
   void _shiftMonth(int delta) {
     setState(() => _month = DateTime(_month.year, _month.month + delta));
@@ -37,18 +38,36 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             final all =
                 repo.getTransactions()
                   ..sort((a, b) => b.date.compareTo(a.date));
+
+            bool inMonth(Transaction t) =>
+                t.date.year == _month.year && t.date.month == _month.month;
+
+            final monthTotal = all
+                .where(inMonth)
+                .fold<double>(
+                  0,
+                  (s, t) => s + (t.type == CategoryType.income ? t.amount : -t.amount),
+                );
+
             final filtered =
                 all.where((t) {
-                  final inMonth =
-                      t.date.year == _month.year &&
-                      t.date.month == _month.month;
-                  if (!inMonth) return false;
-                  if (_typeFilter == null) return true;
-                  return t.type ==
-                      (_typeFilter == 0
-                          ? CategoryType.expense
-                          : CategoryType.income);
+                  if (!inMonth(t)) return false;
+                  if (_typeFilter != null) {
+                    final wanted =
+                        _typeFilter == 0
+                            ? CategoryType.expense
+                            : CategoryType.income;
+                    if (t.type != wanted) return false;
+                  }
+                  if (_tagFilter != null && !t.tags.contains(_tagFilter)) {
+                    return false;
+                  }
+                  return true;
                 }).toList();
+
+            final allTags = <String>{
+              for (final t in all) ...t.tags,
+            }.toList()..sort();
 
             return Scaffold(
               appBar: AppBar(title: const Text('Movimientos')),
@@ -77,7 +96,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                               ),
                             ),
                             Text(
-                              '${formatMoney(filtered.fold<double>(0, (s, t) => s + (t.type == CategoryType.income ? t.amount : -t.amount)))} del mes',
+                              '${formatMoney(monthTotal)} del mes',
                               style: const TextStyle(
                                 fontSize: 12,
                                 color: Colors.black54,
@@ -120,6 +139,30 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                       ],
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  if (allTags.isNotEmpty)
+                    SizedBox(
+                      height: 40,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        children: [
+                          _FilterChip(
+                            label: 'Todas las etiquetas',
+                            selected: _tagFilter == null,
+                            onTap: () => setState(() => _tagFilter = null),
+                          ),
+                          for (final tag in allTags) ...[
+                            const SizedBox(width: 8),
+                            _FilterChip(
+                              label: '#$tag',
+                              selected: _tagFilter == tag,
+                              onTap: () => setState(() => _tagFilter = tag),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
                   const SizedBox(height: 8),
                   Expanded(
                     child:

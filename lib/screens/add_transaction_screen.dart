@@ -68,6 +68,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     _tagController.clear();
   }
 
+  String _resolveCategoryId(List<Category> categories) {
+    if (categories.any((c) => c.id == _categoryId)) return _categoryId;
+    return categories.isNotEmpty ? categories.first.id : '';
+  }
+
   Future<void> _save() async {
     final amount = double.tryParse(_amountController.text.replaceAll(',', '.'));
     if (amount == null || amount <= 0) {
@@ -75,12 +80,17 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       return;
     }
     final repo = FinanceRepository.instance;
+    final categoryId = _resolveCategoryId(repo.getCategoriesByType(_type));
+    if (categoryId.isEmpty) {
+      setState(() => _error = 'Crea una categoría antes de guardar.');
+      return;
+    }
     final existing = widget.transaction;
     final transaction = Transaction(
       id: existing?.id ?? const Uuid().v4(),
       type: _type,
       amount: amount,
-      categoryId: _categoryId,
+      categoryId: categoryId,
       tags: List.of(_tags),
       description: _descriptionController.text.trim(),
       date: _date,
@@ -100,10 +110,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         builder: (context, _, __) {
           final repo = FinanceRepository.instance;
           final categories = repo.getCategoriesByType(_type);
-
-          if (!categories.any((c) => c.id == _categoryId)) {
-            _categoryId = categories.isNotEmpty ? categories.first.id : '';
-          }
+          final categoryId = _resolveCategoryId(categories);
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16),
@@ -145,7 +152,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                     height: 130,
                     child: _CategoryGrid(
                       categories: categories,
-                      selectedId: _categoryId,
+                      selectedId: categoryId,
                       onSelect: (id) => setState(() => _categoryId = id),
                     ),
                   ),
@@ -232,7 +239,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   width: double.infinity,
                   height: 52,
                   child: FilledButton(
-                    onPressed: categories.isEmpty ? null : _save,
+                    onPressed: categoryId.isEmpty ? null : _save,
                     style: FilledButton.styleFrom(
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
