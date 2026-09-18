@@ -105,6 +105,43 @@ pasarlo a `_pieSection` (hoy llama `getCategories()` por cada rebanada).
 
 Se usa Hive en directorio temporal dentro de setUp/tearDown.
 
+## 11. Metas de ahorro
+
+**Archivos:** `lib/models/savings_goal.dart` (nuevo),
+`lib/data/finance_repository.dart`, `lib/screens/plan_tab.dart`,
+`lib/screens/goal_editor.dart` (nuevo), `test/savings_goal_test.dart` (nuevo)
+
+- Nueva entidad `SavingsGoal`: nombre, monto objetivo, ahorrado, categoría de
+  gasto (a la que se abonan las aportaciones), fecha límite opcional y ahorro
+  mensual previsto opcional.
+- Box Hive nueva `savings_goals` con su `ValueListenable` (`savingsGoalsListenable`).
+- CRUD en el repository + agregados (`totalGoalTargets`, `totalGoalSaved`).
+- `contributeToGoal`: crea una transacción de gasto real (tag `meta`, descripción
+  `"<nombre> (aportación de ahorro)"`) y aumenta el ahorrado; la aportación se
+  limita al monto que falta.
+- `deleteCategory` ahora también bloquea categorías usadas por metas.
+- Export/import incluye `savings_goals`; el import la trata como **opcional**
+  para que respaldos viejos sigan cargando.
+- UI: sección "Metas de ahorro" en `PlanTab` (entre la tarjeta de ahorro y los
+  compromisos) con tarjetas que muestran progreso, "Te faltan $X · YY%",
+  meses estimados al ritmo actual y cuánto hace falta por mes para la fecha;
+  botón "Aportar" (diálogo), menú editar/eliminar y estado vacío.
+- Pantalla `GoalEditorScreen` con nombre, montos, categoría de gasto, fecha
+  límite (date picker opcional), ahorro mensual previsto y un aviso del
+  "disponible para ahorro" según el Plan.
+
+## 12. Revisión de la sección "Ahorro planeado"
+
+**Documento de detalle:** `docs/PLAN_ahorro_planeado.md`
+
+- `GoalEditorScreen` recibe `planMonth` (el mes visible del Plan) para que el
+  aviso de "disponible para ahorro" coincida con la tarjeta.
+- `debtsDueTotal` ahora incluye cuotas vencidas no pagadas (fecha ≤ fin del mes
+  seleccionado); la tarjeta pasa a decir "Deudas pendientes".
+- En `_SavingsCard`, "Meta: $X" → "Meta mensual: $X".
+- Nuevo renglón "Ahorrado en metas" (suma de gastos con tag `meta` del mes)
+  vía `getMonthSavingsContributions(month)`.
+
 ## Validación final
 
 - `flutter analyze` sin issues.

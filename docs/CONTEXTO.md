@@ -23,21 +23,23 @@ Nombre clave: **AFP**.
 - `intl` — formato de moneda y fechas en `es_MX`
 - `uuid` — IDs
 - `file_saver` + `file_selector` — exportar/importar respaldo JSON (web/Android/Windows)
+- `package_info_plus` — versión/build real del paquete para el footer y "Acerca de"
 - `flutter_lints` — lints recomendados
 
 ## Arquitectura
 
 - **Singleton de datos:** `lib/data/finance_repository.dart`
   - Boxes Hive: `categories`, `transactions`, `planned_expenses`, `debts`,
-    `plan_config`.
+    `plan_config`, `savings_goals`.
   - Expone `ValueListenable` por box para que las pantallas se actualicen solas.
 - **Modelos** (`lib/models/`): `Category`, `Transaction`, `PlannedExpense`,
-  `Debt`, `PlanConfig`. Todos con `toMap`/`fromMap`.
+  `Debt`, `PlanConfig`, `SavingsGoal`. Todos con `toMap`/`fromMap`.
 - **Pantallas** (`lib/screens/`), organizadas en `HomeScreen` con
   `NavigationBar` + `IndexedStack` (se conserva el estado por pestaña):
   1. `DashboardTab` — balance total, ingresos/gastos del mes, movimientos recientes.
   2. `TransactionsScreen` — movimientos por mes con filtro de tipo.
-  3. `PlanTab` — compromisos, deudas y ahorro planeado (con selector de mes).
+  3. `PlanTab` — compromisos, deudas, metas de ahorro y ahorro planeado
+     (con selector de mes).
   4. `ReportsScreen` — gastos por categoría (pastel) e ingresos vs gastos (barras).
   5. `CategoriesScreen` — CRUD de categorías con ícono y color.
 - **Widgets/helpers:** `TransactionTile`/`CategoryAvatar`, `theme.dart`,
@@ -54,11 +56,19 @@ Nombre clave: **AFP**.
 - Una **deuda** tiene un total, pago acumulado y un calendario de cuotas
   (`computeInstallments`) por semana, quincena, mes o pago único. Abonar crea
   transacciones de gasto automáticamente.
+- Una **meta de ahorro** tiene un monto objetivo y un ahorrado acumulado.
+  "Aportar" crea una transacción de gasto real (tag `meta`) y actualiza el
+  ahorrado; la aportación se limita a lo que falta. Si tiene fecha límite se
+  muestra cuánto se necesita ahorrar por mes.
 - `PlanConfig` guarda `monthlyIncome` y `savingsGoal`;
   "disponible para ahorro" = ingreso planeado − compromisos − deudas del mes.
+  Las "deudas pendientes" incluyen cuotas vencidas no pagadas. La tarjeta
+  "Ahorro planeado" también muestra lo ahorrado en metas del mes
+  (`getMonthSavingsContributions`, gastos con tag `meta`).
 - Respaldo: el menú "⋮" del Dashboard permite exportar/importar toda la base en
   un archivo JSON (`exportAll`/`importAll`). El import reemplaza los datos
-  actuales tras confirmación.
+  actuales tras confirmación. La clave `savings_goals` es opcional (respaldos
+  viejos cargan igual).
 
 ## Datos por defecto
 
@@ -78,6 +88,7 @@ compras, otros). Se siembran al arrancar si la box está vacía.
 - `test/debt_schedule_test.dart` — calendario de cuotas y pagos de deudas.
 - `test/finance_repository_test.dart` — límites de fin de mes y round-trip
   export/import (Hive en directorio temporal).
+- `test/savings_goal_test.dart` — cálculos del modelo y aportaciones a metas.
 
 ## Comandos
 
@@ -92,5 +103,8 @@ flutter build web --release
 ## Estado del código
 
 - `flutter analyze`: sin issues.
-- Tests: 15/15 en verde.
-- Rama actual: `dev`. Cambios sin commitear tras la revisión (sept-2026).
+- Tests: 29/29 en verde.
+- Versión: `1.1.0+2`. Footer con la versión visible en el Dashboard y diálogo
+  "Acerca de" en el menú "⋮".
+- Rama actual: `dev`. Tareas "Metas de ahorro", revisión de "Ahorro planeado" y
+  versión visual terminadas y en validación (sept-2026).

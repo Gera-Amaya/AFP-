@@ -6,10 +6,12 @@ import '../models/category.dart';
 import '../models/debt.dart';
 import '../models/plan_config.dart';
 import '../models/planned_expense.dart';
+import '../models/savings_goal.dart';
 import '../theme.dart';
 import '../utils/format.dart';
 import '../widgets/transaction_tile.dart';
 import 'debt_editor.dart';
+import 'goal_editor.dart';
 import 'planned_expense_editor.dart';
 
 class PlanTab extends StatefulWidget {
@@ -35,6 +37,7 @@ class _PlanTabState extends State<PlanTab> {
       repo.plannedExpensesListenable,
       repo.debtsListenable,
       repo.planConfigListenable,
+      repo.savingsGoalsListenable,
     ]);
     _listenable = listenable;
     _listenable!.addListener(_onChanged);
@@ -55,11 +58,13 @@ class _PlanTabState extends State<PlanTab> {
     final repo = FinanceRepository.instance;
     final expenses = repo.getPlannedExpenses();
     final debts = repo.getDebts();
+    final goals = repo.getSavingsGoals();
     final config = repo.getPlanConfig();
     final currentKey = currentMonthKey(_month);
 
     final plannedTotal = repo.plannedExpensesTotal();
     final debtsDue = repo.debtsDueTotal(_month);
+    final savedInGoals = repo.getMonthSavingsContributions(_month);
     final available = repo.availableForSavings(_month);
 
     return Scaffold(
@@ -92,9 +97,41 @@ class _PlanTabState extends State<PlanTab> {
             income: config.monthlyIncome,
             plannedTotal: plannedTotal,
             debtsDue: debtsDue,
+            savedInGoals: savedInGoals,
             available: available,
             goal: config.savingsGoal,
           ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              const Text(
+                'Metas de ahorro',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              ),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: () => _openGoalEditor(context),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Agregar'),
+              ),
+            ],
+          ),
+          if (goals.isEmpty)
+            const _HintCard(
+              icon: Icons.flag_outlined,
+              text: 'Crea una meta para ahorrar hacia algo concreto.',
+            )
+          else
+            for (final g in goals)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _GoalCard(
+                  goal: g,
+                  onContribute: () => _contribute(context, g),
+                  onEdit: () => _openGoalEditor(context, g),
+                  onDelete: () => _deleteGoal(context, g),
+                ),
+              ),
           const SizedBox(height: 20),
           Row(
             children: [
@@ -239,6 +276,79 @@ class _PlanTabState extends State<PlanTab> {
             ],
           ),
     );
+  }
+
+  void _openGoalEditor(BuildContext context, [SavingsGoal? g]) {
+    Navigator.of(
+      context,
+    ).push(
+      MaterialPageRoute(
+        builder: (_) => GoalEditorScreen(goal: g, planMonth: _month),
+      ),
+    );
+  }
+
+  void _deleteGoal(BuildContext context, SavingsGoal g) {
+    showDialog<void>(
+      context: context,
+      builder:
+          (dialogContext) => AlertDialog(
+            title: const Text('Eliminar meta'),
+            content: Text('¿Eliminar "${g.name}"?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Cancelar'),
+              ),
+              TextButton(
+                style: TextButton.styleFrom(foregroundColor: dangerColor),
+                onPressed: () async {
+                  await FinanceRepository.instance.deleteSavingsGoal(g.id);
+                  if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                },
+                child: const Text('Eliminar'),
+              ),
+            ],
+          ),
+    );
+  }
+
+  void _contribute(BuildContext context, SavingsGoal g) {
+    final controller = TextEditingController(
+      text: g.remaining.toStringAsFixed(2),
+    );
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Aportar a "${g.name}"'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(
+            labelText: 'Monto de la aportación',
+            prefixText: r'$ ',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final amount = double.tryParse(
+                controller.text.replaceAll(',', '.'),
+              );
+              if (amount == null || amount <= 0) return;
+              await FinanceRepository.instance.contributeToGoal(g, amount);
+              if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+            },
+            child: const Text('Aportar'),
+          ),
+        ],
+      ),
+    ).whenComplete(controller.dispose);
   }
 
   void _pay(BuildContext context, Debt d) {
@@ -404,6 +514,7 @@ class _SavingsCard extends StatelessWidget {
   final double income;
   final double plannedTotal;
   final double debtsDue;
+  final double savedInGoals;
   final double available;
   final double goal;
 
@@ -411,6 +522,7 @@ class _SavingsCard extends StatelessWidget {
     required this.income,
     required this.plannedTotal,
     required this.debtsDue,
+    required this.savedInGoals,
     required this.available,
     required this.goal,
   });
@@ -447,10 +559,16 @@ class _SavingsCard extends StatelessWidget {
             color: AppColors.expense,
           ),
           _SummaryRow(
-            label: 'Deudas por vencer',
+            label: 'Deudas pendientes',
             amount: debtsDue,
             icon: Icons.credit_card_outlined,
             color: AppColors.expense,
+          ),
+          _SummaryRow(
+            label: 'Ahorrado en metas',
+            amount: savedInGoals,
+            icon: Icons.savings_outlined,
+            color: AppColors.income,
           ),
           const Divider(height: 20),
           Row(
@@ -490,7 +608,7 @@ class _SavingsCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 10),
                 Text(
-                  'Meta: ${formatMoney(goal)}',
+                  'Meta mensual: ${formatMoney(goal)}',
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -862,6 +980,150 @@ class _HintCard extends StatelessWidget {
             child: Text(text, style: const TextStyle(color: Colors.black54)),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _GoalCard extends StatelessWidget {
+  final SavingsGoal goal;
+  final VoidCallback onContribute;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  const _GoalCard({
+    required this.goal,
+    required this.onContribute,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final repo = FinanceRepository.instance;
+    final category = repo.getCategory(goal.categoryId);
+    final percent = (goal.progress * 100).round();
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                if (category != null) ...[
+                  CategoryAvatar(category: category, size: 36),
+                  const SizedBox(width: 10),
+                ],
+                Expanded(
+                  child: Text(
+                    goal.name,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+                PopupMenuButton<String>(
+                  onSelected: (value) {
+                    if (value == 'edit') onEdit();
+                    if (value == 'delete') onDelete();
+                  },
+                  itemBuilder:
+                      (_) => const [
+                        PopupMenuItem(value: 'edit', child: Text('Editar')),
+                        PopupMenuItem(value: 'delete', child: Text('Eliminar')),
+                      ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(5),
+                    child: LinearProgressIndicator(
+                      value: goal.progress,
+                      minHeight: 8,
+                      backgroundColor: Colors.black12,
+                      color: goal.isAchieved ? AppColors.income : seedColor,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  '$percent%',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              goal.isAchieved
+                  ? 'Meta lograda: ${formatMoney(goal.savedAmount)} '
+                      'de ${formatMoney(goal.targetAmount)}'
+                  : 'Te faltan ${formatMoney(goal.remaining)} · '
+                      '${formatMoney(goal.savedAmount)} de '
+                      '${formatMoney(goal.targetAmount)}',
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+            if (!goal.isAchieved) ...[
+              if (goal.monthsToReach != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '~${goal.monthsToReach} meses al ritmo de '
+                    '${formatMoney(goal.monthlyContribution!)}/mes',
+                    style: const TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
+                ),
+              if (goal.neededMonthlyByDeadline() != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    'Necesitas '
+                    '${formatMoney(goal.neededMonthlyByDeadline()!)}/mes '
+                    'para tu fecha (${formatDateShort(goal.deadline!)})',
+                    style: const TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
+                ),
+              const SizedBox(height: 6),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton.tonalIcon(
+                  onPressed: onContribute,
+                  icon: const Icon(Icons.savings_outlined, size: 18),
+                  label: const Text('Aportar'),
+                ),
+              ),
+            ] else ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(
+                    Icons.check_circle,
+                    color: AppColors.income,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Meta cumplida',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.income,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

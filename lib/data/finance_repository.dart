@@ -7,6 +7,7 @@ import '../models/category.dart';
 import '../models/debt.dart';
 import '../models/plan_config.dart';
 import '../models/planned_expense.dart';
+import '../models/savings_goal.dart';
 import '../models/transaction.dart';
 import '../utils/format.dart';
 
@@ -15,6 +16,7 @@ const boxNameTransactions = 'transactions';
 const boxNamePlannedExpenses = 'planned_expenses';
 const boxNameDebts = 'debts';
 const boxNamePlanConfig = 'plan_config';
+const boxNameSavingsGoals = 'savings_goals';
 
 Future<void> initStorage() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,6 +30,7 @@ Future<void> initStorage() async {
   await Hive.openBox<Map>(boxNamePlannedExpenses);
   await Hive.openBox<Map>(boxNameDebts);
   await Hive.openBox<Map>(boxNamePlanConfig);
+  await Hive.openBox<Map>(boxNameSavingsGoals);
 }
 
 class FinanceRepository {
@@ -40,6 +43,7 @@ class FinanceRepository {
   Box<Map> get _plannedExpensesBox => Hive.box(boxNamePlannedExpenses);
   Box<Map> get _debtsBox => Hive.box(boxNameDebts);
   Box<Map> get _planConfigBox => Hive.box(boxNamePlanConfig);
+  Box<Map> get _savingsGoalsBox => Hive.box(boxNameSavingsGoals);
 
   ValueListenable<Box<Map>> get categoriesListenable =>
       _categoriesBox.listenable();
@@ -50,6 +54,8 @@ class FinanceRepository {
   ValueListenable<Box<Map>> get debtsListenable => _debtsBox.listenable();
   ValueListenable<Box<Map>> get planConfigListenable =>
       _planConfigBox.listenable();
+  ValueListenable<Box<Map>> get savingsGoalsListenable =>
+      _savingsGoalsBox.listenable();
 
   Map<String, dynamic> _cast(Map raw) => Map<String, dynamic>.from(raw);
 
@@ -100,6 +106,14 @@ class FinanceRepository {
     if (usedByDebts) {
       throw Exception(
         'No se puede eliminar: hay deudas que usan esta categoría.',
+      );
+    }
+    final usedByGoals = _savingsGoalsBox.values
+        .map((m) => SavingsGoal.fromMap(_cast(m)))
+        .any((g) => g.categoryId == id);
+    if (usedByGoals) {
+      throw Exception(
+        'No se puede eliminar: hay metas de ahorro que usan esta categoría.',
       );
     }
     await _categoriesBox.delete(id);
@@ -213,6 +227,43 @@ class FinanceRepository {
   Future<void> savePlanConfig(PlanConfig config) =>
       _planConfigBox.put('config', config.toMap());
 
+  // ---------- Metas de ahorro ----------
+
+  List<SavingsGoal> getSavingsGoals() =>
+      _savingsGoalsBox.values
+          .map((m) => SavingsGoal.fromMap(_cast(m)))
+          .toList();
+
+  Future<void> saveSavingsGoal(SavingsGoal goal) =>
+      _savingsGoalsBox.put(goal.id, goal.toMap());
+
+  Future<void> deleteSavingsGoal(String id) => _savingsGoalsBox.delete(id);
+
+  double totalGoalTargets() =>
+      getSavingsGoals().fold(0, (sum, g) => sum + g.targetAmount);
+
+  double totalGoalSaved() =>
+      getSavingsGoals().fold(0, (sum, g) => sum + g.savedAmount);
+
+  Future<void> contributeToGoal(SavingsGoal goal, double amount) async {
+    if (amount <= 0 || goal.isAchieved) return;
+    final effective = amount > goal.remaining ? goal.remaining : amount;
+    await saveTransaction(
+      Transaction(
+        id: const Uuid().v4(),
+        type: CategoryType.expense,
+        amount: effective,
+        categoryId: goal.categoryId,
+        tags: const ['meta'],
+        description: '${goal.name} (aportación de ahorro)',
+        date: DateTime.now(),
+      ),
+    );
+    await saveSavingsGoal(
+      goal.copyWith(savedAmount: goal.savedAmount + effective),
+    );
+  }
+
   // ---------- Respaldo (export/import) ----------
 
   Map<String, dynamic> exportAll() => {
@@ -222,6 +273,7 @@ class FinanceRepository {
     'transactions': _transactionsBox.values.map(_cast).toList(),
     'planned_expenses': _plannedExpensesBox.values.map(_cast).toList(),
     'debts': _debtsBox.values.map(_cast).toList(),
+    'savings_goals': _savingsGoalsBox.values.map(_cast).toList(),
     'plan_config': _planConfigBox.get('config') == null
         ? null
         : _cast(_planConfigBox.get('config')!),
@@ -246,6 +298,28 @@ class FinanceRepository {
     final transactions = readList('transactions');
     final plannedExpenses = readList('planned_expenses');
     final debts = readList('debts');
+
+    List<Map<String, dynamic>> readListOrEmpty(String key) {
+      final raw = data[key];
+      if (raw == null) return const [];
+      if (raw is! List) {
+        throw FormatException(
+          'Respaldo inválido: "$key" o no es una lista.',
+        );
+      }
+      return [
+        for (final item in raw)
+          if (item is Map)
+            _cast(item)
+          else
+            throw const FormatException(
+              'Respaldo inválido: entrada corrupta.',
+            ),
+      ];
+    }
+
+    final savingsGoals = readListOrEmpty('savings_goals');
+
     final config = data['plan_config'] is Map
         ? _cast(data['plan_config']! as Map)
         : null;
@@ -254,6 +328,7 @@ class FinanceRepository {
     await _transactionsBox.clear();
     await _plannedExpensesBox.clear();
     await _debtsBox.clear();
+    await _savingsGoalsBox.clear();
     await _planConfigBox.clear();
 
     for (final c in categories) {
@@ -267,6 +342,9 @@ class FinanceRepository {
     }
     for (final d in debts) {
       await _debtsBox.put(d['id'] as String, d);
+    }
+    for (final g in savingsGoals) {
+      await _savingsGoalsBox.put(g['id'] as String, g);
     }
     if (config != null) {
       await _planConfigBox.put('config', config);
@@ -282,9 +360,7 @@ class FinanceRepository {
     var total = 0.0;
     for (final debt in getDebts()) {
       for (final inst in debt.installments) {
-        if (!debt.isInstallmentPaid(inst) &&
-            inst.date.year == month.year &&
-            inst.date.month == month.month) {
+        if (!debt.isInstallmentPaid(inst) && !isAfterMonth(inst.date, month)) {
           total += inst.amount;
         }
       }
@@ -311,6 +387,23 @@ class FinanceRepository {
   static bool isBeforeMonth(DateTime date, DateTime month) =>
       date.year < month.year ||
       (date.year == month.year && date.month < month.month);
+
+  static bool isAfterMonth(DateTime date, DateTime month) =>
+      date.year > month.year ||
+      (date.year == month.year && date.month > month.month);
+
+  double getMonthSavingsContributions(DateTime month) {
+    final start = DateTime(month.year, month.month);
+    final end = DateTime(
+      month.year,
+      month.month + 1,
+    ).subtract(const Duration(days: 1));
+    return getTransactionsBetween(
+      start,
+      end,
+    ).where((t) => t.type == CategoryType.expense && t.tags.contains('meta'))
+        .fold(0, (sum, t) => sum + t.amount);
+  }
 
   // ---------- Predeterminadas ----------
 

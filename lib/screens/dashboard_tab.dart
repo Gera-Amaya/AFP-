@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import '../data/finance_repository.dart';
 import '../models/transaction.dart';
 import '../theme.dart';
+import '../utils/app_info.dart';
 import '../utils/format.dart';
 import '../widgets/transaction_tile.dart';
 import 'add_transaction_screen.dart';
@@ -66,6 +67,7 @@ class DashboardTab extends StatelessWidget {
                       onSelected: (value) {
                         if (value == 'export') _exportBackup(context);
                         if (value == 'import') _importBackup(context);
+                        if (value == 'about') _openAbout(context);
                       },
                       itemBuilder:
                           (_) => const [
@@ -76,6 +78,10 @@ class DashboardTab extends StatelessWidget {
                             PopupMenuItem(
                               value: 'import',
                               child: Text('Importar respaldo'),
+                            ),
+                            PopupMenuItem(
+                              value: 'about',
+                              child: Text('Acerca de'),
                             ),
                           ],
                     ),
@@ -164,6 +170,50 @@ class DashboardTab extends StatelessWidget {
         );
       }
     }
+  }
+
+  Future<void> _openAbout(BuildContext context) {
+    return showDialog<void>(
+      context: context,
+      builder:
+          (dialogContext) => AlertDialog(
+            icon: const Icon(
+              Icons.savings_outlined,
+              size: 40,
+              color: seedColor,
+            ),
+            title: const Text('AFP'),
+            content: FutureBuilder<String>(
+              future: appVersionLabel(),
+              builder: (context, snapshot) {
+                final version = snapshot.data ?? 'v—';
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('Versión $version', textAlign: TextAlign.center),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Plataforma: ${platformLabel()}',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Tus datos se guardan solo en este dispositivo.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 12, color: Colors.black54),
+                    ),
+                  ],
+                );
+              },
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Cerrar'),
+              ),
+            ],
+          ),
+    );
   }
 
   Future<void> _importBackup(BuildContext context) async {
