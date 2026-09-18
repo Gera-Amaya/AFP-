@@ -97,7 +97,7 @@ class _NavVersionLabel extends StatelessWidget {
         style: const TextStyle(
           fontSize: 9,
           height: 1,
-          color: Colors.black22,
+          color: Colors.black26,
           letterSpacing: 0.3,
         ),
       ),
