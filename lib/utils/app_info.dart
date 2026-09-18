@@ -1,6 +1,4 @@
-import 'dart:io' show Platform;
-
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 Future<String> appVersionLabel() async {
@@ -11,10 +9,12 @@ Future<String> appVersionLabel() async {
 
 String platformLabel() {
   if (kIsWeb) return 'Web';
-  if (Platform.isAndroid) return 'Android';
-  if (Platform.isIOS) return 'iOS';
-  if (Platform.isWindows) return 'Windows';
-  if (Platform.isMacOS) return 'macOS';
-  if (Platform.isLinux) return 'Linux';
-  return 'Otro';
+  return switch (defaultTargetPlatform) {
+    TargetPlatform.android => 'Android',
+    TargetPlatform.iOS => 'iOS',
+    TargetPlatform.windows => 'Windows',
+    TargetPlatform.macOS => 'macOS',
+    TargetPlatform.linux => 'Linux',
+    TargetPlatform.fuchsia => 'Fuchsia',
+  };
 }
