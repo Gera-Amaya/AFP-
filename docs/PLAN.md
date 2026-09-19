@@ -142,10 +142,26 @@ Se usa Hive en directorio temporal dentro de setUp/tearDown.
 - Nuevo renglón "Ahorrado en metas" (suma de gastos con tag `meta` del mes)
   vía `getMonthSavingsContributions(month)`.
 
+## 13. "Por pagar en {mes}" en la tarjeta de ahorro
+
+**Archivos:** `lib/data/finance_repository.dart`, `lib/screens/plan_tab.dart`,
+`test/finance_repository_test.dart`
+
+- Nuevo `plannedExpensesPendingTotal(month)`: suma de compromisos cuyo
+  `lastPaidKey` no corresponde al mes visible.
+- En `_SavingsCard`, nueva fila "Por pagar en {mes}" que se reduce al pagar
+  compromisos (baja a 0 y se pinta verde). "Compromisos mensuales" se mantiene
+  como presupuesto (sin cambios).
+- `availableForSavings` pasa a dinero real (no presupuesto):
+  `getBalance() − plannedExpensesPendingTotal(month) − debtsDueTotal(month)`.
+  Pagar un compromiso baja el balance exactamente lo que baja lo pendiente, por
+  lo que el disponible real no cambia al pagar; así ya no sale negativo si ya
+  cubriste tus obligaciones del mes.
+
 ## Validación final
 
 - `flutter analyze` sin issues.
-- `flutter test` en verde (10 existentes + nuevos).
+- `flutter test` en verde (30 existentes + nuevos).
 
 ## No incluido (fuera de alcance)
 

@@ -60,11 +60,15 @@ Nombre clave: **AFP**.
   "Aportar" crea una transacción de gasto real (tag `meta`) y actualiza el
   ahorrado; la aportación se limita a lo que falta. Si tiene fecha límite se
   muestra cuánto se necesita ahorrar por mes.
-- `PlanConfig` guarda `monthlyIncome` y `savingsGoal`;
-  "disponible para ahorro" = ingreso planeado − compromisos − deudas del mes.
+- `PlanConfig` guarda `monthlyIncome` y `savingsGoal`.
+  "Disponible para ahorro" (`availableForSavings`) = `getBalance()` (dinero
+  real acumulado) − `plannedExpensesPendingTotal(month)` − `debtsDueTotal(month)`.
   Las "deudas pendientes" incluyen cuotas vencidas no pagadas. La tarjeta
-  "Ahorro planeado" también muestra lo ahorrado en metas del mes
-  (`getMonthSavingsContributions`, gastos con tag `meta`).
+  "Ahorro planeado" muestra "Compromisos mensuales" (total, presupuesto) y
+  "Por pagar en {mes}" (`plannedExpensesPendingTotal`: solo los no pagados del
+  mes visible); pagar un compromiso baja el balance tanto como lo pendiente,
+  así que el disponible real no cambia. Además muestra lo ahorrado en metas del
+  mes (`getMonthSavingsContributions`, gastos con tag `meta`).
 - Respaldo: el menú "⋮" del Dashboard permite exportar/importar toda la base en
   un archivo JSON (`exportAll`/`importAll`). El import reemplaza los datos
   actuales tras confirmación. La clave `savings_goals` es opcional (respaldos

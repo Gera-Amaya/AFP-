@@ -172,6 +172,13 @@ class FinanceRepository {
           .map((m) => PlannedExpense.fromMap(_cast(m)))
           .toList();
 
+  double plannedExpensesPendingTotal(DateTime month) {
+    final key = currentMonthKey(month);
+    return getPlannedExpenses()
+        .where((e) => e.lastPaidKey != key)
+        .fold(0, (sum, e) => sum + e.amount);
+  }
+
   Future<void> savePlannedExpense(PlannedExpense expense) =>
       _plannedExpensesBox.put(expense.id, expense.toMap());
 
@@ -380,9 +387,7 @@ class FinanceRepository {
   }
 
   double availableForSavings(DateTime month) =>
-      getPlanConfig().monthlyIncome -
-      plannedExpensesTotal() -
-      debtsDueTotal(month);
+      getBalance() - plannedExpensesPendingTotal(month) - debtsDueTotal(month);
 
   static bool isBeforeMonth(DateTime date, DateTime month) =>
       date.year < month.year ||
