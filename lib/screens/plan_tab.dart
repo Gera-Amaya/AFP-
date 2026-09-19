@@ -63,6 +63,7 @@ class _PlanTabState extends State<PlanTab> {
     final currentKey = currentMonthKey(_month);
 
     final plannedTotal = repo.plannedExpensesTotal();
+    final plannedPending = repo.plannedExpensesPendingTotal(_month);
     final debtsDue = repo.debtsDueTotal(_month);
     final savedInGoals = repo.getMonthSavingsContributions(_month);
     final available = repo.availableForSavings(_month);
@@ -96,6 +97,8 @@ class _PlanTabState extends State<PlanTab> {
           _SavingsCard(
             income: config.monthlyIncome,
             plannedTotal: plannedTotal,
+            plannedPending: plannedPending,
+            planMonth: _month,
             debtsDue: debtsDue,
             savedInGoals: savedInGoals,
             available: available,
@@ -513,6 +516,8 @@ class _MonthSelector extends StatelessWidget {
 class _SavingsCard extends StatelessWidget {
   final double income;
   final double plannedTotal;
+  final double plannedPending;
+  final DateTime planMonth;
   final double debtsDue;
   final double savedInGoals;
   final double available;
@@ -521,6 +526,8 @@ class _SavingsCard extends StatelessWidget {
   const _SavingsCard({
     required this.income,
     required this.plannedTotal,
+    required this.plannedPending,
+    required this.planMonth,
     required this.debtsDue,
     required this.savedInGoals,
     required this.available,
@@ -557,6 +564,12 @@ class _SavingsCard extends StatelessWidget {
             amount: plannedTotal,
             icon: Icons.event_note_outlined,
             color: AppColors.expense,
+          ),
+          _SummaryRow(
+            label: 'Por pagar en ${monthName(planMonth)}',
+            amount: plannedPending,
+            icon: Icons.check_circle_outline,
+            color: plannedPending > 0 ? dangerColor : AppColors.income,
           ),
           _SummaryRow(
             label: 'Deudas pendientes',

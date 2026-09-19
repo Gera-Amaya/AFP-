@@ -244,4 +244,127 @@ void main() {
       expect(repo.debtsDueTotal(feb), expected);
     });
   });
+
+  group('compromisos por pagar', () {
+    test('plannedExpensesPendingTotal solo suma los no pagados del mes',
+        () async {
+      final repo = FinanceRepository.instance;
+      await repo.savePlannedExpense(
+        PlannedExpense(
+          id: 'p1',
+          name: 'Renta',
+          amount: 4000,
+          categoryId: 'casa',
+          dayOfMonth: 5,
+          lastPaidKey: '2026-09',
+        ),
+      );
+      await repo.savePlannedExpense(
+        PlannedExpense(
+          id: 'p2',
+          name: 'Internet',
+          amount: 800,
+          categoryId: 'casa',
+          dayOfMonth: 10,
+        ),
+      );
+
+      expect(repo.plannedExpensesPendingTotal(DateTime(2026, 9)), 800);
+      expect(repo.plannedExpensesPendingTotal(DateTime(2026, 10)), 4800);
+    });
+  });
+
+  group('disponible para ahorro (dinero real)', () {
+    test('availableForSavings = balance − pendientes del mes', () async {
+      final repo = FinanceRepository.instance;
+      await repo.saveTransaction(
+        Transaction(
+          id: 't-income',
+          type: CategoryType.income,
+          amount: 10000,
+          categoryId: 'sueldo',
+          description: 'Sueldo',
+          date: DateTime(2026, 9, 1),
+        ),
+      );
+      await repo.savePlannedExpense(
+        PlannedExpense(
+          id: 'p1',
+          name: 'Renta',
+          amount: 4000,
+          categoryId: 'casa',
+          dayOfMonth: 5,
+        ),
+      );
+      await repo.savePlannedExpense(
+        PlannedExpense(
+          id: 'p2',
+          name: 'Internet',
+          amount: 800,
+          categoryId: 'casa',
+          dayOfMonth: 10,
+          lastPaidKey: '2026-09',
+        ),
+      );
+      await repo.saveDebt(
+        Debt(
+          id: 'd1',
+          name: 'Tarjeta',
+          totalAmount: 1200,
+          categoryId: 'comida',
+          startDate: DateTime(2026, 9, 20),
+          frequency: PaymentFrequency.monthly,
+          numberOfPayments: 1,
+        ),
+      );
+
+      final sep = DateTime(2026, 9);
+      expect(repo.plannedExpensesPendingTotal(sep), 4000);
+      expect(repo.debtsDueTotal(sep), 1200);
+      expect(repo.availableForSavings(sep), closeTo(10000 - 4000 - 1200, 0.001));
+    });
+
+    test('pagar un compromiso no cambia el disponible real', () async {
+      final repo = FinanceRepository.instance;
+      await repo.saveTransaction(
+        Transaction(
+          id: 't-income',
+          type: CategoryType.income,
+          amount: 10000,
+          categoryId: 'sueldo',
+          description: 'Sueldo',
+          date: DateTime(2026, 9, 1),
+        ),
+      );
+      final p = PlannedExpense(
+        id: 'p1',
+        name: 'Renta',
+        amount: 4000,
+        categoryId: 'casa',
+        dayOfMonth: 5,
+      );
+      await repo.savePlannedExpense(p);
+
+      final sep = DateTime(2026, 9);
+      final before = repo.availableForSavings(sep);
+      expect(before, 6000);
+
+      await repo.saveTransaction(
+        Transaction(
+          id: 't-pago',
+          type: CategoryType.expense,
+          amount: p.amount,
+          categoryId: p.categoryId,
+          description: '${p.name} (pago de compromiso)',
+          date: DateTime(2026, 9, 18),
+        ),
+      );
+      await repo.savePlannedExpense(p.copyWith(lastPaidKey: '2026-09'));
+
+      final after = repo.availableForSavings(sep);
+      expect(repo.getBalance(), 6000);
+      expect(repo.plannedExpensesPendingTotal(sep), 0);
+      expect(after, closeTo(before, 0.001));
+    });
+  });
 }
