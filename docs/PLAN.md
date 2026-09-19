@@ -158,10 +158,24 @@ Se usa Hive en directorio temporal dentro de setUp/tearDown.
   lo que el disponible real no cambia al pagar; así ya no sale negativo si ya
   cubriste tus obligaciones del mes.
 
+## 14. Bloqueo de seguridad de la app (PIN + biometría)
+
+**Documento de detalle:** `docs/PLAN_seguridad.md` · Versión: `1.2.0+4`
+
+- Dependencias: `local_auth ^2.3.0` (biometría native; sin web) y `crypto ^3.0.6`.
+- `SecurityService` (singleton `ChangeNotifier`): PIN como hash SHA-256 con salt
+  en la box `security`; `unlocked` solo en memoria; `enablePin`/`disablePin`/
+  `unlock`/`lock`/`authenticateBiometrics` (guardado con `kIsWeb`).
+- `LockScreen` en `home_screen.dart` cuando `enabled && !unlocked`; re-bloqueo
+  al volver de segundo plano (`AppLifecycleListener`) y botón "Bloquear ahora".
+- Menú "⋮" del Dashboard → "Seguridad": activar/desactivar/cambiar PIN y nota
+  de disponibilidad biométrica. El iOS `Info.plist` queda pendiente de la
+  plataforma (todavía no existe carpeta `ios/`).
+
 ## Validación final
 
 - `flutter analyze` sin issues.
-- `flutter test` en verde (30 existentes + nuevos).
+- `flutter test` en verde (32 existentes + nuevos).
 
 ## No incluido (fuera de alcance)
 

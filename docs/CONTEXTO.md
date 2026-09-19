@@ -24,14 +24,20 @@ Nombre clave: **AFP**.
 - `uuid` — IDs
 - `file_saver` + `file_selector` — exportar/importar respaldo JSON (web/Android/Windows)
 - `package_info_plus` — versión/build real del paquete para el footer y "Acerca de"
+- `local_auth` — biometría nativa (Face ID / huella / Windows Hello; no soporta web)
+- `crypto` — hash SHA-256 del PIN de bloqueo
 - `flutter_lints` — lints recomendados
 
 ## Arquitectura
 
 - **Singleton de datos:** `lib/data/finance_repository.dart`
   - Boxes Hive: `categories`, `transactions`, `planned_expenses`, `debts`,
-    `plan_config`, `savings_goals`.
+    `plan_config`, `savings_goals`, `security`.
   - Expone `ValueListenable` por box para que las pantallas se actualicen solas.
+- **Seguridad:** `lib/security/security_service.dart` — singleton
+  `ChangeNotifier` para el bloqueo de la app: `enabled`/hash del PIN en la box
+  `security`, `unlocked` solo en memoria, `lock()`, `unlock(pin)` y
+  `authenticateBiometrics()` (guardado con `kIsWeb`).
 - **Modelos** (`lib/models/`): `Category`, `Transaction`, `PlannedExpense`,
   `Debt`, `PlanConfig`, `SavingsGoal`. Todos con `toMap`/`fromMap`.
 - **Pantallas** (`lib/screens/`), organizadas en `HomeScreen` con
@@ -72,7 +78,13 @@ Nombre clave: **AFP**.
 - Respaldo: el menú "⋮" del Dashboard permite exportar/importar toda la base en
   un archivo JSON (`exportAll`/`importAll`). El import reemplaza los datos
   actuales tras confirmación. La clave `savings_goals` es opcional (respaldos
-  viejos cargan igual).
+  viejos cargan igual). La configuración de seguridad **no** viaja en el respaldo.
+- **Seguridad:** bloqueo opcional de la app (menú "⋮" → Seguridad). El PIN se
+  guarda únicamente como hash SHA-256 con salt en la box `security`; `unlocked`
+  vive solo en memoria. Si está activo, `HomeScreen` muestra `LockScreen` al
+  abrir, al volver de segundo plano (`AppLifecycleListener`) o con "Bloquear
+  ahora". Biometría disponible en Android/Windows (desbloqueo acelerado en la
+  pantalla de bloqueo); en web siempre se usa el PIN.
 
 ## Datos por defecto
 
@@ -93,6 +105,8 @@ compras, otros). Se siembran al arrancar si la box está vacía.
 - `test/finance_repository_test.dart` — límites de fin de mes y round-trip
   export/import (Hive en directorio temporal).
 - `test/savings_goal_test.dart` — cálculos del modelo y aportaciones a metas.
+- `test/security_service_test.dart` — bloqueo: enable/disable/cambio de PIN,
+  unlock, lock y que el hash no contiene el PIN.
 
 ## Comandos
 
@@ -107,8 +121,9 @@ flutter build web --release
 ## Estado del código
 
 - `flutter analyze`: sin issues.
-- Tests: 29/29 en verde.
-- Versión: `1.1.0+2`. Footer con la versión visible en el Dashboard y diálogo
+- Tests: 38/38 en verde.
+- Versión: `1.2.0+4`. Footer con la versión visible en el Dashboard y diálogo
   "Acerca de" en el menú "⋮".
-- Rama actual: `dev`. Tareas "Metas de ahorro", revisión de "Ahorro planeado" y
-  versión visual terminadas y en validación (sept-2026).
+- Rama actual: `dev`. Terminadas: metas de ahorro, revisión de "Ahorro
+  planeado", versión visible, "Por pagar en {mes}", disponible con dinero real
+  y bloqueo de seguridad con PIN + biometría (18-sep-2026).
