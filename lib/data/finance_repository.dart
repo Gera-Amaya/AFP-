@@ -17,6 +17,7 @@ const boxNamePlannedExpenses = 'planned_expenses';
 const boxNameDebts = 'debts';
 const boxNamePlanConfig = 'plan_config';
 const boxNameSavingsGoals = 'savings_goals';
+const boxNameSecurity = 'security';
 
 Future<void> initStorage() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -31,6 +32,7 @@ Future<void> initStorage() async {
   await Hive.openBox<Map>(boxNameDebts);
   await Hive.openBox<Map>(boxNamePlanConfig);
   await Hive.openBox<Map>(boxNameSavingsGoals);
+  await Hive.openBox(boxNameSecurity);
 }
 
 class FinanceRepository {

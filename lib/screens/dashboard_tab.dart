@@ -1,13 +1,14 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:file_saver/file_saver.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../data/finance_repository.dart';
 import '../models/transaction.dart';
+import '../security/security_service.dart';
 import '../theme.dart';
 import '../utils/app_info.dart';
 import '../utils/format.dart';
@@ -68,6 +69,8 @@ class DashboardTab extends StatelessWidget {
                         if (value == 'export') _exportBackup(context);
                         if (value == 'import') _importBackup(context);
                         if (value == 'about') _openAbout(context);
+                        if (value == 'security') _openSecurity(context);
+                        if (value == 'lock') _lockNow(context);
                       },
                       itemBuilder:
                           (_) => const [
@@ -78,6 +81,14 @@ class DashboardTab extends StatelessWidget {
                             PopupMenuItem(
                               value: 'import',
                               child: Text('Importar respaldo'),
+                            ),
+                            PopupMenuItem(
+                              value: 'security',
+                              child: Text('Seguridad'),
+                            ),
+                            PopupMenuItem(
+                              value: 'lock',
+                              child: Text('Bloquear ahora'),
                             ),
                             PopupMenuItem(
                               value: 'about',
@@ -214,6 +225,185 @@ class DashboardTab extends StatelessWidget {
             ],
           ),
     );
+  }
+
+  void _lockNow(BuildContext context) {
+    final service = SecurityService.instance;
+    if (!service.enabled) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Activa el bloqueo con PIN en Seguridad.')),
+      );
+      return;
+    }
+    service.lock();
+  }
+
+  Future<void> _openSecurity(BuildContext context) {
+    final service = SecurityService.instance;
+    final current = TextEditingController();
+    final next = TextEditingController();
+    final confirm = TextEditingController();
+    String? localError;
+
+    Future<void> finish(String message) async {
+      if (context.mounted) {
+        await showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => AlertDialog(
+            content: Text(message),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+    }
+
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          final enabled = service.enabled;
+
+          void validatePins() {
+            final pin = next.text;
+            if (pin.length < 4 || pin != confirm.text) {
+              setDialogState(() {
+                localError =
+                    'El PIN debe tener al menos 4 dígitos y coincidir en ambos campos.';
+              });
+              return;
+            }
+            localError = null;
+          }
+
+          Widget pinField(TextEditingController c, String label) =>
+              TextField(
+                controller: c,
+                obscureText: true,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: false,
+                ),
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: InputDecoration(labelText: label),
+              );
+
+          return AlertDialog(
+            title: const Text('Seguridad'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Bloqueo con PIN'),
+                    subtitle: const Text(
+                      'Pide desbloqueo al abrir la app y al volver de segundo plano.',
+                    ),
+                    value: enabled,
+                    onChanged: enabled
+                        ? (on) async {
+                            if (!service.unlock(current.text)) {
+                              setDialogState(() {
+                                localError = 'PIN actual incorrecto.';
+                              });
+                              return;
+                            }
+                            await service.disablePin();
+                            if (dialogContext.mounted) {
+                              Navigator.of(dialogContext).pop();
+                            }
+                            await finish('Bloqueo desactivado.');
+                          }
+                        : (on) async {
+                            final pin = next.text;
+                            validatePins();
+                            if (localError != null) return;
+                            await service.enablePin(pin);
+                            if (dialogContext.mounted) {
+                              Navigator.of(dialogContext).pop();
+                            }
+                            await finish('Bloqueo activado.');
+                          },
+                  ),
+                  const SizedBox(height: 4),
+                  if (!enabled) ...[
+                    pinField(next, 'Nuevo PIN'),
+                    pinField(confirm, 'Repite el PIN'),
+                  ] else ...[
+                    pinField(current, 'PIN actual'),
+                    pinField(next, 'PIN nuevo'),
+                    pinField(confirm, 'Repite el PIN nuevo'),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: () async {
+                          validatePins();
+                          if (localError != null) return;
+                          if (!service.unlock(current.text)) {
+                            setDialogState(() {
+                              localError = 'PIN actual incorrecto.';
+                            });
+                            return;
+                          }
+                          await service.enablePin(next.text);
+                          if (dialogContext.mounted) {
+                            Navigator.of(dialogContext).pop();
+                          }
+                          await finish('PIN actualizado.');
+                        },
+                        icon: const Icon(Icons.password),
+                        label: const Text('Cambiar PIN'),
+                      ),
+                    ),
+                  ],
+                  if (localError != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        localError!,
+                        style: const TextStyle(
+                          color: dangerColor,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 8),
+                  FutureBuilder<bool>(
+                    future: service.biometricsAvailable(),
+                    builder: (context, snapshot) => Text(
+                      snapshot.data == true
+                          ? 'Tu dispositivo puede usar biometría (Face ID / huella / Windows Hello) para desbloquear más rápido.'
+                          : 'La biometría no está disponible aquí (en Android/Windows sí); usa tu PIN.',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.black54,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Cerrar'),
+              ),
+            ],
+          );
+        },
+      ),
+    ).whenComplete(() {
+      current.dispose();
+      next.dispose();
+      confirm.dispose();
+    });
   }
 
   Future<void> _importBackup(BuildContext context) async {

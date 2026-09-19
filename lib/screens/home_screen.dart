@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../security/security_service.dart';
 import '../utils/app_info.dart';
 import 'add_transaction_screen.dart';
 import 'categories_screen.dart';
 import 'dashboard_tab.dart';
+import 'lock_screen.dart';
 import 'plan_tab.dart';
 import 'reports_screen.dart';
 import 'transactions_screen.dart';
@@ -18,27 +20,63 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _index = 0;
 
+  AppLifecycleListener? _lifecycle;
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycle = AppLifecycleListener(
+      onResume: () => SecurityService.instance.lock(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _lifecycle?.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(
-        index: _index,
-        children: [
-          DashboardTab(onShowAll: () => setState(() => _index = 1)),
-          const TransactionsScreen(),
-          const PlanTab(),
-          const ReportsScreen(),
-          const CategoriesScreen(),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          await Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const AddTransactionScreen()),
+      body: ListenableBuilder(
+        listenable: SecurityService.instance,
+        builder: (context, _) {
+          final service = SecurityService.instance;
+          if (service.enabled && !service.unlocked) {
+            return const LockScreen();
+          }
+          return IndexedStack(
+            index: _index,
+            children: [
+              DashboardTab(onShowAll: () => setState(() => _index = 1)),
+              const TransactionsScreen(),
+              const PlanTab(),
+              const ReportsScreen(),
+              const CategoriesScreen(),
+            ],
           );
         },
-        icon: const Icon(Icons.add),
-        label: const Text('Movimiento'),
+      ),
+      floatingActionButton: ListenableBuilder(
+        listenable: SecurityService.instance,
+        builder: (context, _) {
+          final service = SecurityService.instance;
+          if (service.enabled && !service.unlocked) {
+            return const SizedBox.shrink();
+          }
+          return FloatingActionButton.extended(
+            onPressed: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const AddTransactionScreen(),
+                ),
+              );
+            },
+            icon: const Icon(Icons.add),
+            label: const Text('Movimiento'),
+          );
+        },
       ),
       bottomNavigationBar: Stack(
         alignment: Alignment.bottomRight,
